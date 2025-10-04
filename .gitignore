@@ -1,0 +1,105 @@
+# UCore 操作系统实验项目 .gitignore 文件
+
+# 编译产物和可执行文件
+bin/
+obj/
+*.img
+*.elf
+*.bin
+kernel
+kernel.asm
+kernel.sym
+ucore.img
+
+# 编译中间产物
+*.o
+*.d
+*.asm
+*.sym
+*.out
+
+# 调试和日志文件
+*.log
+*.gdb_history
+.gdbinit.local
+
+# 临时文件
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+
+# 编辑器临时文件
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.emacs.desktop
+.emacs.desktop.lock
+
+# 系统临时文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 实验报告临时文件
+*.aux
+*.log
+*.toc
+*.bbl
+*.blg
+
+# 构建工具生成的文件
+.cscope.files
+cscope.in.out
+cscope.out
+cscope.po.out
+tags
+TAGS
+
+# 网络和远程文件
+.ssh/
+*.pem
+
+# 环境和配置
+.env
+.env.local
+.env.*.local
+
+# 包管理器
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 测试覆盖率报告
+coverage/
+*.lcov
+
+# 其他不需要版本控制的文件
+*.core
+*.stackdump
+
+# 特定实验文件的临时输出
+lab*/bin/
+lab*/obj/
+lab*/kernel
+lab*/kernel.asm
+lab*/kernel.sym
+lab*/ucore.img
+
+# 实验过程中生成的图片和其他资源
+lab*/report/assest/*.png
+!lab*/report/assest/  # 保留目录但忽略内容，!表示例外
+
+# 避免递归忽略重要文件
+!README.md
+!实验指导书.md
+!实验资源汇总.md
+!.gitignore

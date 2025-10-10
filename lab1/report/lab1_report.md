@@ -1,9 +1,12 @@
-# lab1: 最小可执行内核
+# <center> Lab1 </center>
 
-金莫迪 廖望 李星宇
+<center> 金莫迪 廖望 李星宇 </center>
 
-![gdb启动流程跟踪与验证](./assests/屏幕截图%202025-10-10%20125813.png)
-**gdb 启动流程跟踪与验证**
+<div align="center">
+  <img src="./assests/屏幕截图 2025-10-10 125813.png" alt="gdb启动流程跟踪与验证">
+</div>
+
+<center> gdb 启动流程跟踪与验证 </center>
 
 ## 实验目的
 
@@ -38,40 +41,91 @@
 
 ## 实验过程
 
+
+
 ### 环境准备
 
-本实验的环境基于 `Ubuntu Linux` (20.04+) 构建，核心组件包括 RISC-V 交叉编译工具链和 QEMU 模拟器。由于软件版本迭代，配置过程中可能会遇到兼容性问题，本节将提供一套结构化的配置方案与排错思路。
+#### 实验机基本配置
 
-#### 1. 交叉编译工具链 (`riscv64-unknown-elf-gcc`)
+为了方便多人协作，我们使用同一台实验机完成实验任务，实验机的配置为
 
-**说明**:
-我们使用 SiFive 提供的 `riscv64-unknown-elf-gcc` 预编译工具链，用于将 C 和汇编代码编译成 RISC-V 架构的可执行文件。建议使用较新的稳定版本以保证兼容性。
 
-**安装与配置**:
+```bash
+OS: Ubuntu 20.04.5 LTS x86_64 
+Kernel: 5.15.0-52-generic 
+CPU: 12th Gen Intel i9-12900K (24) @ 5.200GHz 
+```
 
-1.  **解压与链接**: 将工具链解压至推荐目录 `/opt/riscv`。为方便管理，可使用符号链接统一路径，例如 `sudo ln -s <解压目录> /opt/riscv`。
-2.  **配置环境变量**: 将工具链的可执行文件路径加入 `PATH`。编辑 `~/.bashrc` 文件，添加 `export PATH=$PATH:/opt/riscv/bin`，然后执行 `source ~/.bashrc` 使其生效。
-    - **验证**: 在终端输入 `riscv64-unknown-elf-gcc --version`，如果能正确显示版本号，则说明配置成功。
+通过生成sha256实现多人的共同访问，使用vscode ssh-remote进行连接
 
-#### 2. QEMU 模拟器
 
-**说明**:
-QEMU (`qemu-system-riscv64`) 是用于模拟 RISC-V 硬件环境的核心工具。不同版本的 QEMU 与 OpenSBI (底层固件) 组合可能会影响内核加载方式，这是常见的排错点。
+#### 安装预编译（prebuilt） 工具链
 
-**安装**:
+为了实现交叉编译，我们使用sifive公司提供的预编译工具链，进入[sifive](https://github.com/sifive/freedom-tools/releases)，选择[ubuntu14-riscv64-unknown-elf](https://static.dev.sifive.com/dev-tools/freedom-tools/v2020.12/riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-linux-ubuntu14.tar.gz)进行下载，解压到了/opt/riscv路径下面，之后编辑~/.bashrc文档，输入
 
-- **推荐方式**: 使用系统的包管理器进行安装，以自动处理依赖关系：`sudo apt install qemu-system-riscv64`。
-- **源码编译**: 若需从源码编译，请注意根据配置脚本的错误提示安装 `libglib2.0-dev`、`libpixman-1-dev` 等必要的开发库。
+```bash
+export RISCV=/opt/riscv
+export PATH=$RISCV/bin:$PATH
+```
+之后运行
 
-#### 3. 项目构建与适配 (`Makefile`)
+```bash
+source ~/.bashrc
+```
 
-**说明**:
-`Makefile` 文件是自动化构建内核的枢纽，它调用工具链编译源码，并生成最终的内核镜像，同时负责启动 QEMU。
+完成全局配置。
 
-**环境适配**:
+输入
 
-1.  **工具链路径问题**: 如果 `make` 过程中提示 `riscv64-unknown-elf-gdb: No such file or directory` 等错误，通常是 `PATH` 环境变量未正确配置。此时，除了检查 `~/.bashrc`，也可以直接修改 `Makefile`，将 `gcc`、`gdb` 等命令替换为绝对路径。
-2.  **QEMU 启动参数兼容性**: 这是一个关键的适配点。旧版本的 `Makefile` 可能使用 `-device loader,file=...` 方式加载内核，而新版 QEMU/OpenSBI 则推荐使用 `-kernel <ELF 文件>` 的方式。如果内核无法启动，请检查 OpenSBI 日志中的 `Domain0 Next Address` 是否指向内核加载地址 (`0x80200000`)。若为 `0x0`，则应将 `Makefile` 中的启动命令更新为 `-kernel` 方式。
+```bash
+riscv64-unknown-elf-gcc -v
+```
+
+检查一下是否安装成功。
+
+![安装成功](assests/build_tool.png)
+
+可以看到已经出现了gcc版本，说明预编译工具链已经安装成功了。
+
+#### 安装qemu
+
+为了运行riscv64代码，我们还需要安装对应的模拟器。下载对应的压缩包解压后，确认环境时报错：
+
+```bash
+ERROR: glib-2.40 gthread-2.0 is required to compile QEMU
+```
+
+安装对应包来解决
+
+```bash
+sudo apt update
+sudo apt install libglib2.0-dev libpixman-1-dev
+```
+
+确认一下安装成功：
+
+```bash
+$ qemu-system-riscv64 --version
+```
+
+![安装成功](assests/qemu.png)
+
+最后再来验证一下Qemu中的OpenSBI
+
+```bash
+$ qemu-system-riscv64 \
+  --machine virt \
+  --nographic \
+  --bios default
+```
+
+![安装成功](assests/opensbi.png)
+
+再尝试编译一下lab1的代码
+
+![启动成功](assests/start.png)
+
+运行成功了，输出了(THU.CST) os is loading ...，至此我们的环境准备好了，准备开干！
 
 ### 练习 1：理解启动流程
 

@@ -95,6 +95,41 @@ qemu-system-riscv64 --version
 qemu-system-riscv64 -machine virt -nographic -bios default
 ```
 
+### 4. IDE (Cursor/VS Code) 配置指南
+
+为了在现代代码编辑器中获得最佳体验（如代码补全、跳转和实时错误检查），推荐使用 `clangd` 插件。以下步骤将指导你如何正确配置 `clangd` 以识别本项目的交叉编译环境。
+
+#### 4.1 安装 `make` 和 `bear`
+
+`make` 是项目构建工具，而 `bear` 是一个可以生成 `clangd` 配置文件 (`compile_commands.json`) 的工具。
+
+```bash
+# 安装 make, gcc 等核心构建工具
+sudo apt install -y build-essential
+
+# 安装 bear
+sudo apt install -y bear
+```
+
+#### 4.2 生成 clangd 配置文件
+
+你需要为每个实验（lab）单独生成配置文件。这样可以确保 `clangd` 使用完全正确的编译指令来分析代码。
+
+**以 `lab1` 为例:**
+
+```bash
+cd lab1
+bear -- make
+```
+
+该命令执行后，会在 `lab1` 目录下生成一个 `compile_commands.json` 文件。对 `lab2`, `lab3` 等其他实验，重复此步骤即可。
+
+#### 4.3 重启 clangd
+
+在生成配置文件后，回到 Cursor 或 VS Code，打开命令面板 (Ctrl+Shift+P)，然后运行 `clangd: Restart language server` 命令。
+
+完成以上步骤后，IDE 中的 `file not found` 等错误应该会全部消失。
+
 ## 构建和运行
 
 ### 编译项目

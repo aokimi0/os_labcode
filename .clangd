@@ -1,0 +1,6 @@
+CompileFlags:
+  Add:
+    - -std=gnu11
+    - --target=riscv64-unknown-elf
+Diagnostics:
+  Suppress: [unused-includes]

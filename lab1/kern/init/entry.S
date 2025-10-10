@@ -1,8 +1,8 @@
     .section .text,"ax",%progbits
     .globl kern_entry
 kern_entry:
-    lui sp, 0x80210
-    j .
+    la sp, bootstacktop
+    tail kern_init
 
 .section .data
     .align 12

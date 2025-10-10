@@ -1,0 +1,6 @@
+CompileFlags:
+  Add:
+    # lab3 specific includes, relative to this directory
+    - -I./libs
+    - -I./kern
+    - -I./kern/driver

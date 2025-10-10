@@ -49,6 +49,12 @@ ucore.img
 ehthumbs.db
 Thumbs.db
 
+# 缓存文件
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.cache/
+
 # 实验报告临时文件
 *.aux
 *.log

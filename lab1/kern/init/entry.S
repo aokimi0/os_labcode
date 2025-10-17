@@ -1,18 +1,13 @@
-#include <mmu.h>
-#include <memlayout.h>
-
     .section .text,"ax",%progbits
     .globl kern_entry
 kern_entry:
     la sp, bootstacktop
-
     tail kern_init
 
 .section .data
-    # .align 2^12
-    .align PGSHIFT
+    .align 12
     .global bootstack
 bootstack:
-    .space KSTACKSIZE
+    .space 8192
     .global bootstacktop
 bootstacktop:

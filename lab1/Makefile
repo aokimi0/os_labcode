@@ -26,6 +26,17 @@ HOSTCFLAGS	:= -Wall -O2
 
 GDB		:= $(GCCPREFIX)gdb
 
+# auto-detect available gdb: prefer riscv64-unknown-elf-gdb, then gdb-multiarch, then gdb
+ifeq ($(shell command -v $(GCCPREFIX)gdb >/dev/null 2>&1; echo $$?),0)
+GDB_BIN := $(GCCPREFIX)gdb
+else
+  ifeq ($(shell command -v gdb-multiarch >/dev/null 2>&1; echo $$?),0)
+GDB_BIN := gdb-multiarch
+  else
+GDB_BIN := gdb
+  endif
+endif
+
 CC		:= $(GCCPREFIX)gcc
 CFLAGS  := -mcmodel=medany -std=gnu99 -Wno-unused -Werror
 CFLAGS	+= -fno-builtin -Wall -O2 -nostdinc $(DEFS)
@@ -158,23 +169,17 @@ TARGETS: $(TARGETS)
 
 .PHONY: qemu 
 qemu: $(UCOREIMG) $(SWAPIMG) $(SFSIMG)
-#	$(V)$(QEMU) -kernel $(UCOREIMG) -nographic
-	$(V)$(QEMU) \
-		-machine virt \
-		-nographic \
-		-bios default \
-		-device loader,file=$(UCOREIMG),addr=0x80200000
+	$(V)$(QEMU) -kernel $(kernel) -nographic
 
 debug: $(UCOREIMG) $(SWAPIMG) $(SFSIMG)
 	$(V)$(QEMU) \
 		-machine virt \
 		-nographic \
-		-bios default \
-		-device loader,file=$(UCOREIMG),addr=0x80200000\
+		-kernel $(kernel) \
 		-s -S
 
 gdb:
-	riscv64-unknown-elf-gdb \
+	$(GDB_BIN) \
     -ex 'file bin/kernel' \
     -ex 'set arch riscv:rv64' \
     -ex 'target remote localhost:1234'

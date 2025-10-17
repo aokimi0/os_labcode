@@ -1,0 +1,8 @@
+CompileFlags:
+  Add:
+    # lab2 specific includes, relative to this directory
+    - -I./libs
+    - -I./kern
+    - -I./kern/driver
+    - -I./kern/mm
+    - -I./kern/debug

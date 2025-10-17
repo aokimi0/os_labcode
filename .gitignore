@@ -1,0 +1,94 @@
+# 通用构建产物与临时文件
+
+# 顶层与各 lab 目录的构建输出目录
+bin/
+obj/
+build/
+out/
+dist/
+lab*/bin/
+lab*/obj/
+lab*/out/
+lab*/build/
+
+# 编译产物与依赖文件
+*.o
+*.d
+*.a
+*.so
+*.so.*
+*.la
+*.lo
+*.lai
+
+# 可执行/镜像/映射等常见目标
+*.elf
+*.out
+*.bin
+*.img
+*.iso
+*.map
+*.hex
+*.dump
+*.list
+*.lst
+*.asm
+
+# 覆盖率与报告
+*.gcno
+*.gcda
+*.gcov
+coverage/
+
+# 日志与临时文件
+*.log
+*.tmp
+*.temp
+*~
+.#*
+*.swp
+*.swo
+*.swn
+*.swm
+
+# 编辑器/IDE
+.vscode/
+.idea/
+.cursorrules
+*.code-workspace
+.ccls-cache/
+.clangd/
+.clang-tidy
+.clang-format
+compile_commands.json
+
+# Python 缓存（稳妥忽略）
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# QEMU/GDB 等调试输出
+qemu.log
+.gdb_history
+
+# 工具与环境缓存
+.cursor/
+.agent/
+.agent-tools/
+.direnv/
+.envrc
+.cache/
+
+# 杂项
+tags
+cscope.*
+*.patch
+*.rej
+
+# lab 下 tools 目录偶发生成的二进制/目标
+lab*/tools/*.o
+lab*/tools/*.d
+lab*/tools/*.exe
+lab*/tools/*.out
+

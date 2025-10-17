@@ -36,3 +36,13 @@ void sbi_console_putchar(unsigned char ch) {
 void sbi_set_timer(unsigned long long stime_value) {
     sbi_call(SBI_SET_TIMER, stime_value, 0, 0);
 }
+
+int sbi_console_getchar(void) {
+    /* returns <0 if no character available, or the character (unsigned) */
+    uint64_t r = sbi_call(SBI_CONSOLE_GETCHAR, 0, 0, 0);
+    return (int)r;
+}
+
+void sbi_shutdown(void) {
+    sbi_call(SBI_SHUTDOWN, 0, 0, 0);
+}

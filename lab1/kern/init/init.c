@@ -9,6 +9,8 @@ int kern_init(void) {
 
     const char *message = "(THU.CST) os is loading ...\n";
     cprintf("%s\n\n", message);
-   while (1)
-        ;
+   while (1);
 }
+
+
+

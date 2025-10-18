@@ -72,10 +72,10 @@ best_fit_init_memmap(struct Page *base, size_t n) {
     struct Page *p = base;
     for (; p != base + n; p ++) {
         assert(PageReserved(p));
-        // 清空当前页框的标志和属性信息，并将页框的引用计数设置为0
+        // 转为可分配状态：清保留位/属性位，ref=0
         p->flags = 0;
-        p->property = 0;
         set_page_ref(p, 0);
+        ClearPageProperty(p);
     }
     base->property = n;
     SetPageProperty(base);
@@ -86,11 +86,12 @@ best_fit_init_memmap(struct Page *base, size_t n) {
         list_entry_t* le = &free_list;
         while ((le = list_next(le)) != &free_list) {
             struct Page* page = le2page(le, page_link);
-            // 保持按物理地址递增顺序插入
+            // 将新空闲块按地址有序插入到链表
             if (base < page) {
                 list_add_before(le, &(base->page_link));
                 break;
             } else if (list_next(le) == &free_list) {
+                // 插到表尾（le 之后）
                 list_add(le, &(base->page_link));
             }
         }
@@ -105,18 +106,13 @@ best_fit_alloc_pages(size_t n) {
     }
     struct Page *page = NULL;
     list_entry_t *le = &free_list;
-    size_t min_size = nr_free + 1;
-    // 遍历空闲链表，查找最小可满足 n 的块
+    size_t min_size = (size_t)-1;
+    // Best-Fit：遍历所有空闲块，选择满足需求且容量最小的块
     while ((le = list_next(le)) != &free_list) {
         struct Page *p = le2page(le, page_link);
-        if (PageProperty(p) && p->property >= n) {
-            if (p->property < min_size) {
-                min_size = p->property;
-                page = p;
-                if (min_size == n) {
-                    break; // 不能更优
-                }
-            }
+        if (p->property >= n && p->property < min_size) {
+            page = p;
+            min_size = p->property;
         }
     }
 
@@ -127,6 +123,7 @@ best_fit_alloc_pages(size_t n) {
             struct Page *p = page + n;
             p->property = page->property - n;
             SetPageProperty(p);
+            // 余块与原块同地址序，插到 prev 之后
             list_add(prev, &(p->page_link));
         }
         nr_free -= n;
@@ -144,11 +141,10 @@ best_fit_free_pages(struct Page *base, size_t n) {
         p->flags = 0;
         set_page_ref(p, 0);
     }
-    // 设置属性并计入空闲计数
+    // 设置当前页块属性并入链
     base->property = n;
     SetPageProperty(base);
     nr_free += n;
-
     if (list_empty(&free_list)) {
         list_add(&free_list, &(base->page_link));
     } else {
@@ -167,7 +163,7 @@ best_fit_free_pages(struct Page *base, size_t n) {
     list_entry_t* le = list_prev(&(base->page_link));
     if (le != &free_list) {
         p = le2page(le, page_link);
-        // 若前块与当前块物理相邻，则向前合并
+        // 与前一个空闲块合并
         if (p + p->property == base) {
             p->property += base->property;
             ClearPageProperty(base);

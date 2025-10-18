@@ -1,5 +1,7 @@
 #include <default_pmm.h>
 #include <best_fit_pmm.h>
+#include <buddy_pmm.h>
+#include <slub.h>
 #include <defs.h>
 #include <error.h>
 #include <memlayout.h>
@@ -34,7 +36,17 @@ static void check_alloc_page(void);
 
 // init_pmm_manager - initialize a pmm_manager instance
 static void init_pmm_manager(void) {
+    // 通过编译开关选择物理内存管理器，默认 Best-Fit
+    // -DPMM_MANAGER_BUDDY    使用 buddy_pmm_manager
+    // -DPMM_MANAGER_DEFAULT  使用 default_pmm_manager (first-fit)
+    // 未定义时默认使用 best_fit_pmm_manager
+#if defined(PMM_MANAGER_BUDDY)
+    pmm_manager = &buddy_pmm_manager;
+#elif defined(PMM_MANAGER_DEFAULT)
+    pmm_manager = &default_pmm_manager;
+#else
     pmm_manager = &best_fit_pmm_manager;
+#endif
     cprintf("memory management: %s\n", pmm_manager->name);
     pmm_manager->init();
 }
@@ -115,6 +127,15 @@ void pmm_init(void) {
 
     // use pmm->check to verify the correctness of the alloc/free function in a pmm
     check_alloc_page();
+
+    // 可选的自测入口：通过编译开关控制，便于独立评测
+#ifdef BUDDY_SELF_TEST
+    extern void buddy_check(void);
+    buddy_check();
+#endif
+#ifdef SLUB_SELF_TEST
+    slub_check();
+#endif
 
     extern char boot_page_table_sv39[];
     satp_virtual = (pte_t*)boot_page_table_sv39;

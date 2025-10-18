@@ -323,7 +323,7 @@ swapimg=$(make_print swapimg)
 
 ## set default qemu-options
 # qemuopts="-hda $osimg"
-qemuopts="-machine virt -nographic -bios default -kernel bin/kernel"
+qemuopts="-machine virt -nographic -bios default -device loader,file=$osimg,addr=0x80200000"
 ## set break-function, default is readline
 brkfun=
 

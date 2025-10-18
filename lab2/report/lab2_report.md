@@ -406,16 +406,16 @@ static void buddy_free_pages(struct Page *base, size_t n) {
 
 ### **扩展练习 Challenge：任意大小的内存单元 SLUB 分配算法**
 
-在操作系统内核中，经常需要动态分配和释放许多小的、固定大小的内存对象（例如 `task_struct`, `inode`, `file` 等）。如果直接使用基于页的物理内存管理器（如 `alloc_pages`）来满足这些小请求，会产生严重的**内部碎片**，造成极大的内存浪费。SLUB 算法是 Linux 内核中用于解决此问题的一种高效内存分配器。其核心思想是\*\*“两层架构”\*\*：
+在操作系统内核中，经常需要动态分配和释放许多小的、固定大小的内存对象（例如 `task_struct`, `inode`, `file` 等）。如果直接使用基于页的物理内存管理器（如 `alloc_pages`）来满足这些小请求，会产生严重的内部碎片，造成极大的内存浪费。SLUB 算法是 Linux 内核中用于解决此问题的一种高效内存分配器。其核心思想是两层架构：
 
 1.  **第一层（底层）：页分配器**
       * 即`alloc_pages` 和 `free_pages`。它以“页”为单位管理物理内存。
 2.  **第二层（上层）：SLUB 分配器**
-      * 它向底层的页分配器申请一个或多个连续的物理页，并将这些页（Slab）“雕刻”成多个大小相等的、较小的内存单元Object。
+      * 它向底层的页分配器申请一个或多个连续的物理页，并将这些页Slab分成多个大小相等的、较小的内存单元Object。
       * 它通过kmem_cache缓存管理器的管理结构，为每一种大小的对象维护一个Slab池。
       * 当内核需要一个小对象时，SLUB 分配器从对应的 `kmem_cache` 中快速取出一个较小的内存单元；释放时则将其快速归还。
 
-本次实验实现了一个简化版的 SLUB 分配器，解决了内核中小内存对象的**高效分配**和**碎片管理**问题。
+本次实验实现了一个简化版的 SLUB 分配器，解决了内核中小内存对象的高效分配和碎片管理问题。
 
 #### 整体架构与数据结构
 
@@ -428,9 +428,9 @@ static void buddy_free_pages(struct Page *base, size_t n) {
       * 每一种 `size-class` 对应一个全局的 `kmem_cache_t` 结构体，保存在 `caches` 数组中。
       * `kmem_cache_t` 负责管理所有该大小的 `Slab`。
       * 它维护三个链表：`empty`（空闲）、`partial`（部分分配）和 `full`（完全占满）。这种三链表结构是 SLUB 高效分配的核心，极大降低分配和释放操作的查找开销`。
-3.  **`Slab`**：
-      * 一个 `Slab` 就是一个从底层页分配器申请来的**物理页**。
-      * 这个页的**头部**存放着 `slab_header_t` 管理结构。
+3.  **Slab**：
+      * 一个 `Slab` 就是一个从底层页分配器申请来的物理页。
+      * 这个页的头部存放着 `slab_header_t` 管理结构。
       * `slab_header_t` 之后紧跟着位图，用于跟踪该 `Slab` 中每个 `Object` 的使用状态。
       * 位图之后是对象区，即被切分好的、连续排列的 `Object`。
 
@@ -479,7 +479,7 @@ static void buddy_free_pages(struct Page *base, size_t n) {
 
 1.  **请求路由**：
 
-      * 如果请求大小 `size>PGSIZ`，说明SLUB无法管理这种大内存。我们**退回到底层页分配器**，直接调用`alloc_pages`分配所需的整页，并返回其虚拟地址。
+      * 如果请求大小 `size>PGSIZ`，说明SLUB无法管理这种大内存。退回到底层页分配器，直接调用`alloc_pages`分配所需的整页，并返回其虚拟地址。
       * 如果 `size<=PGSIZ`，则调用 `size_to_index` 找到Best-fit的`size-class` 索引 `idx`。
       * 定位到对应的缓存管理器 `cache = &caches[idx]`。
 
@@ -505,7 +505,7 @@ static void buddy_free_pages(struct Page *base, size_t n) {
 1.  **反向查找 `Slab`**：
 
       * `kfree` 只接收一个 `Object` 的指针 `ptr`，它必须能反向定位到管理这个 `Object` 的 `Slab` 页头部 `slab_header_t`。
-      * 本实现利用了\*\*“`Slab` 头部位于页首”\*\*这一特性：
+      * 本实现利用了Slab头部位于页首这一特性：
         1.  将 `ptr`（内核虚拟地址）转换为物理地址 `pa`。
         2.  通过 `pa & ~((uintptr_t)PGSIZE - 1)` 计算出 `pa` 所在的物理页的基地址 `page_pa`。
         3.  通过 `pa2page(page_pa)` 找到对应的 `Page` 结构体。
@@ -519,12 +519,12 @@ static void buddy_free_pages(struct Page *base, size_t n) {
 
 #### Slab 内部管理的位图操作
 
-  * new_slab()：在申请新页时，会精确计算页内布局。通过 `while` 循环试探，确保 `sizeof(slab_header_t) + bitmap_size + (max_objs * obj_size) <= PGSIZE`，从而计算出最大容量 `capacity`。
+  * new_slab()：在申请新页时，会精确计算页内布局。通过 `while` 循环试探，确保 `sizeof(slab_header_t) + bitmap_size + (max_objs * obj_size) <= PGSIZE`，从而计算出最大容量capacity。
   * `alloc_from_slab()`：
       * 遍历 `hdr->bitmap` 数组（按 32-bit 词）。
-      * 找到第一个不为 `0xFFFFFFFFu` 的词（说明该词内有 `0` 位）。
+      * 找到第一个不为 `0xFFFFFFFFu` 的词（说明该词内有0位）。
       * 通过 `ctz32(~mask)`（计算反码的末尾0的个数）精确定位到第一个空闲位 `bit`。
-      * 设置该位为 `1`，增加 `used` 计数。
+      * 设置该位为1，增加 `used` 计数。
       * 根据索引 `idx` 计算 `Object` 的实际地址并返回。
   * `free_to_slab()`：
       * 通过指针减法 `(uint8_t *)ptr - obj_base` 计算出 `Object` 的偏移量，除以 `obj_size` 得到其索引 `idx`。
@@ -532,9 +532,9 @@ static void buddy_free_pages(struct Page *base, size_t n) {
       * 将该位清零 `hdr->bitmap[w] &= ~(1u << b)`，减少 `used` 计数。
 
 #### 测试与验证
-我们编写了函数进行测试，测试结果如下
+我们编写了函数`slub_check()`进行测试，测试结果如下。
 <div align="center">
-  <img src="../assests/SLUB.png" alt="slub算法测试">
+  <img src="../assests/slub.png" alt="slub算法测试">
 </div>
 
 <center> slub算法测试 </center>

@@ -181,23 +181,90 @@
 
 是的，当前实现的 First-Fit 算法存在一些可以改进的空间，主要集中在**性能**和**碎片化**两个方面。
 
-1.  **性能改进：Next-Fit 算法**
+1.  **添加指针改进为Next-Fit 算法**
     * **问题**：当前的 First-Fit 实现每次分配都从 `free_list` 的头部开始扫描。这会导致链表头部的区域被反复切割，留下许多小的、难以利用的碎片，并且每次分配小内存时都可能需要跳过这些小碎片，增加了搜索时间。
     * **改进方案**：可以实现 **Next-Fit** 算法。引入一个全局的“上一次查找结束位置”的指针。下一次分配请求到来时，从这个指针指向的位置开始向后搜索，而不是从链表头开始。当搜索到链表末尾时，再回到链表头继续搜索。
     * **优点**：这种方式使得内存的消耗和碎片在整个空闲链表中分布得更均匀，并且在很多情况下可以减少平均搜索长度。
 
-2. **优化数据结构：提升释放与合并的效率**
+2. **构造内存的树结构：提升释放与合并的效率**
 * **当前实现的问题**：`default_free_pages` 函数为了实现相邻块的合并，必须维持 `free_list` 按物理地址有序。这意味着每次释放内存时，都需要线性扫描（O(N)）`free_list` 来找到正确的插入位置。当系统中的空闲块数量（N）非常大时，释放内存的操作会变得很慢。
 * **改进方案**：用一个更高效的、支持排序的数据结构来替代简单的双向链表，例如自平衡二叉搜索树（如红黑树）。
 * **实现**：
     1. 使用红黑树来组织所有空闲块，树的节点按空闲块的物理起始地址进行排序。
     2. 释放时 `free_pages`：在树中查找新释放块的地址，可以在 O(log N) 时间内完成。通过这次查找，可以立即定位到它在地址上的前驱和后继节点，从而高效地进行合并检查和节点操作。
-    3. 分配时 `alloc_pages`：为了严格遵循 First-Fit（最低地址优先）的原则，需要从树的最小节点（最左侧叶子节点）开始进行中序遍历，直到找到满足条件的块。虽然查找的复杂度没有降低，但释放操作的效率得到了质的提升。
-
+    3. 分配时 `alloc_pages`：为了严格遵循 First-Fit（最低地址优先）的原则，需要从树的最小节点（最左侧叶子节点）开始进行中序遍历，直到找到满足条件的块。虽然查找的复杂度没有降低，但释放操作的效率得到了提升。
 * **效果**：在内存分配和释放都非常频繁的系统中，将释放操作的耗时从 O(N) 降低到 O(log N) 可以带来显著的整体性能改善。
-3.  **数据结构改进：多级空闲链表**
-    * **问题**：当系统中存在大量空闲块时，单一的链表线性扫描 O(N) 的效率非常低。
-    * **改进方案**：使用多级空闲链表，也叫分离适配。我们可以根据空闲块的大小来组织它们。例如，创建一个链表数组 `free_list[i]`，其中 `free_list[0]` 存放大小为1的块，`free_list[1]` 存放大小为2的块，`free_list[2]` 存放大小为3-4的块，`free_list[3]` 存放大小为5-8的块，以此类推。
-    * **优点**：当需要分配大小为 `n` 的内存时，可以直接去对应的链表中查找，大大提高了查找效率，时间复杂度接近 O(1)。Linux 内核中的 **伙伴系统 (Buddy System)** 和 **Slab 分配器** 就是基于这种思想的更精妙的实现。
-
 ---
+## 练习二
+Best-fit与First-fit的关键区别在于，Best-fit是要找到一个与大于所需内存大小且与所需内存最接近的空闲空间。因此需要对`default_alloc_pages`进行修改。将分配规则进行修改。
+
+### 设计实现过程
+我的修改集中在 `best_fit_alloc_pages` 函数。与 First-Fit找到第一个满足条件的块就 `break`不同，Best-Fit 的核心思想是**最省**，即找到能满足需求的、最小的空闲块。
+
+- 为此，我实现了一个完整的链表遍历。
+- 我使用一个指针 `best_fit_page`来持续跟踪到目前为止找到的最佳块。
+- 在遍历过程中，每当遇到一个满足 `current_page->property >= n` 的块，我都会将其与 `best_fit_page` 比较：
+  - 如果 `best_fit_page` 还是 `NULL`，则 `best_fit_page = current_page`。
+  - 如果 `current_page->property < best_fit_page->property`，即大小更加接近，则更新 `best_fit_page = current_page`。
+- 当循环结束后，`best_fit_page` 中存储的就是最终选定的块。
+      ```c
+      static struct Page *
+best_fit_alloc_pages(size_t n) {
+    assert(n > 0);
+    if (n > nr_free) {
+        return NULL;
+    }
+
+    struct Page *best_fit_page = NULL; // 用于记录找到的最佳块
+    list_entry_t *le = &free_list;
+
+    // 1. 遍历整个 free_list 链表
+    while ((le = list_next(le)) != &free_list) {
+        struct Page *current_page = le2page(le, page_link);
+        
+        // 2. 检查当前块是否满足要求 (>= n)
+        if (current_page->property >= n) {
+            
+            // 3. 如果这是我们找到的第一个满足条件的块，
+            //    或者当前块比我们记录的 'best_fit_page' 更“贴合”（更小）
+            if (best_fit_page == NULL || current_page->property < best_fit_page->property) {
+                best_fit_page = current_page;
+            }
+        }
+    }
+
+    // 4. 循环结束后，best_fit_page 就是我们要的块（如果为 NULL 则说明没找到）
+    if (best_fit_page != NULL) {
+        // 5.
+        // --- 从这里开始，分割逻辑与 First-Fit 完全相同 ---
+        // 只需要把 First-Fit 中的 'page' 变量名替换为 'best_fit_page'
+        //
+        list_entry_t* prev = list_prev(&(best_fit_page->page_link));
+        list_del(&(best_fit_page->page_link));
+        if (best_fit_page->property > n) {
+            struct Page *p = best_fit_page + n;
+            p->property = best_fit_page->property - n;
+            SetPageProperty(p);
+            list_add(prev, &(p->page_link));
+        }
+        nr_free -= n;
+        ClearPageProperty(best_fit_page);
+    }
+    return best_fit_page;
+}
+       ```
+### 思考题：你的 Best-Fit 算法是否有进一步的改进空间？
+
+是的，我实现的这个 Best-Fit 算法有非常明显的改进空间，主要体现在**性能**和**碎片化**两个方面：
+#### 1. 时间复杂度优化
+- **问题**：当前实现的最大问题是分配效率低下。`best_fit_alloc_pages` 必须遍历整个空闲链表（$O(N)$，$N$ 为*空闲块*的数量）才能找到“最佳”块。在 First-Fit 中，若链表头部有合适的块，分配会非常快（$O(1)$）；但在 Best-Fit 中，每次分配都是 $O(N)$。
+
+- **改进**：
+  - **方案一**：使用多级空闲链表。按块的大小（如 1-2 页、3-4 页、5-8 页...）将块组织在不同链表中。当需要 $n$ 页时，直接去对应大小的链表中查找。
+  - **方案二**：按大小排序的链表。若 `free_list` 本身按大小（`property`）排序，找到“最佳”块会很快，但会让 `free_pages` 的合并操作极其困难（合并需按地址顺序找邻居）。
+
+#### 2. 碎片化问题（“小碎片”陷阱）
+- **问题**：Best-Fit 算法易在内存中留下大量极小、几乎无法利用的空闲块。例如：有 10 页空闲块，请求 9 页时，Best-Fit 会用它并留下 1 页空闲块——这 1 页未来可能无法满足任何请求，成为永久外部碎片。
+
+- **改进**：
+  设置最小分割阈值。在 `best_fit_alloc_pages` 的分割逻辑中增加判断：若剩余部分大小小于阈值，则不分割，直接分配整个块。避免无用碎片污染 `free_list`。

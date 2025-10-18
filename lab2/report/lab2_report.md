@@ -404,11 +404,6 @@ static void buddy_free_pages(struct Page *base, size_t n) {
 
 <center> buddy算法测试 </center>
 
-### 扩展练习Challenge：硬件的可用物理内存范围的获取方法（思考题）
-- 如果 OS 无法提前知道当前硬件的可用物理内存范围，请问你有何办法让 OS 获取可用物理内存范围？
-
-
-- 主动探测：通过逐段写读/页探测推断可用范围。逐页对物理地址做“读-写-读-还原”验证，捕获越界访问或不存在的物理内存触发的 access fault，从而确定 DRAM 连续范围。先粗扫：以较大的步长（例如 2MB 或 1MB）向上探测，直到首次失败，记下最近成功位置。后细化：在“最后成功页”和“首次失败页”之间，按页二分或线性探测，精确到最后一页可用。
 
 
 ### **扩展练习 Challenge：任意大小的内存单元 SLUB 分配算法**
@@ -490,7 +485,7 @@ static void buddy_free_pages(struct Page *base, size_t n) {
       * 如果 `size<=PGSIZ`，则调用 `size_to_index` 找到Best-fit的`size-class` 索引 `idx`。
       * 定位到对应的缓存管理器 `cache = &caches[idx]`。
 
-2.  **Slab查找与分配策略**：
+2.  **Slau查找与分配策略**：
    有三种策略，需要根据具体情况分支选择。
       * **策略一：`partial` 链表优先**。遍历 `cache->partial` 链表。这是最高效的策略，因为它既能满足请求，又能利用未满的 `Slab`。
           * 找到一个 `Slab`，调用 `alloc_from_slab()` 从中获取一个 `Object`。
@@ -545,3 +540,10 @@ static void buddy_free_pages(struct Page *base, size_t n) {
 </div>
 
 <center> slub算法测试 </center>
+
+
+### 扩展练习Challenge：硬件的可用物理内存范围的获取方法（思考题）
+- 如果 OS 无法提前知道当前硬件的可用物理内存范围，请问你有何办法让 OS 获取可用物理内存范围？
+
+
+- 主动探测：通过逐段写读/页探测推断可用范围。逐页对物理地址做“读-写-读-还原”验证，捕获越界访问或不存在的物理内存触发的 access fault，从而确定 DRAM 连续范围。先粗扫：以较大的步长（例如 2MB 或 1MB）向上探测，直到首次失败，记下最近成功位置。后细化：在“最后成功页”和“首次失败页”之间，按页二分或线性探测，精确到最后一页可用。

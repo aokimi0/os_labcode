@@ -230,9 +230,79 @@ slub算法，实现两层架构的高效内存单元分配，第一层是基于�
 * **效果**：在内存分配和释放都非常频繁的系统中，将释放操作的耗时从 O(N) 降低到 O(log N) 可以带来显著的整体性能改善。
 
 
-### 练习2：实现 Best-Fit 连续物理内存分配算法
+### 练习二
+Best-fit与First-fit的关键区别在于，Best-fit是要找到一个与大于所需内存大小且与所需内存最接近的空闲空间。因此需要对`default_alloc_pages`进行修改。将分配规则进行修改。
 
-练习2要求我们实现Best-fit算法，所谓Best-fit算法就是维护按物理地址有序的空闲块链表，在每次分配时遍历所有空闲块，选择“刚好满足请求且最小”的那一个（Best-Fit）。分配时可能将大块切分成“已分配部分 + 剩余空闲部分”；释放时将页面归还并尝试与前后相邻空闲块合并，减少外部碎片。
+#### 设计实现过程
+我的修改集中在 `best_fit_alloc_pages` 函数。与 First-Fit找到第一个满足条件的块就 `break`不同，Best-Fit 的核心思想是**最省**，即找到能满足需求的、最小的空闲块。
+
+- 为此，我实现了一个完整的链表遍历。
+- 我使用一个指针 `best_fit_page`来持续跟踪到目前为止找到的最佳块。
+- 在遍历过程中，每当遇到一个满足 `current_page->property >= n` 的块，我都会将其与 `best_fit_page` 比较：
+  - 如果 `best_fit_page` 还是 `NULL`，则 `best_fit_page = current_page`。
+  - 如果 `current_page->property < best_fit_page->property`，即大小更加接近，则更新 `best_fit_page = current_page`。
+- 当循环结束后，`best_fit_page` 中存储的就是最终选定的块。
+      ```c
+      static struct Page *
+best_fit_alloc_pages(size_t n) {
+    assert(n > 0);
+    if (n > nr_free) {
+        return NULL;
+    }
+
+    struct Page *best_fit_page = NULL; // 用于记录找到的最佳块
+    list_entry_t *le = &free_list;
+
+    // 1. 遍历整个 free_list 链表
+    while ((le = list_next(le)) != &free_list) {
+        struct Page *current_page = le2page(le, page_link);
+        
+        // 2. 检查当前块是否满足要求 (>= n)
+        if (current_page->property >= n) {
+            
+            // 3. 如果这是我们找到的第一个满足条件的块，
+            //    或者当前块比我们记录的 'best_fit_page' 更“贴合”（更小）
+            if (best_fit_page == NULL || current_page->property < best_fit_page->property) {
+                best_fit_page = current_page;
+            }
+        }
+    }
+
+    // 4. 循环结束后，best_fit_page 就是我们要的块（如果为 NULL 则说明没找到）
+    if (best_fit_page != NULL) {
+        // 5.
+        // --- 从这里开始，分割逻辑与 First-Fit 完全相同 ---
+        // 只需要把 First-Fit 中的 'page' 变量名替换为 'best_fit_page'
+        //
+        list_entry_t* prev = list_prev(&(best_fit_page->page_link));
+        list_del(&(best_fit_page->page_link));
+        if (best_fit_page->property > n) {
+            struct Page *p = best_fit_page + n;
+            p->property = best_fit_page->property - n;
+            SetPageProperty(p);
+            list_add(prev, &(p->page_link));
+        }
+        nr_free -= n;
+        ClearPageProperty(best_fit_page);
+    }
+    return best_fit_page;
+}
+       ```
+#### 思考题：你的 Best-Fit 算法是否有进一步的改进空间？
+
+是的，我实现的这个 Best-Fit 算法有改进空间，主要体现在**性能**和**碎片化**两个方面：
+##### 1. 时间复杂度优化
+- **问题**：当前实现的最大问题是分配效率低下。`best_fit_alloc_pages` 必须遍历整个空闲链表（$O(N)$，$N$ 为*空闲块*的数量）才能找到“最佳”块。在 First-Fit 中，若链表头部有合适的块，分配会非常快（$O(1)$）；但在 Best-Fit 中，每次分配都是 $O(N)$。
+
+- **改进**：
+  - **方案一**：使用多级空闲链表。按块的大小（如 1-2 页、3-4 页、5-8 页...）将块组织在不同链表中。当需要 $n$ 页时，直接去对应大小的链表中查找。
+  - **方案二**：按大小排序的链表。若 `free_list` 本身按大小（`property`）排序，找到“最佳”块会很快，但会让 `free_pages` 的合并操作极其困难（合并需按地址顺序找邻居）。
+
+##### 2. 碎片化问题
+- **问题**：Best-Fit 算法易在内存中留下大量极小、几乎无法利用的空闲块。例如：有 10 页空闲块，请求 9 页时，Best-Fit 会用它并留下 1 页空闲块——这 1 页未来可能无法满足任何请求，成为永久外部碎片。
+
+- **改进**：
+  设置最小分割阈值。在 `best_fit_alloc_pages` 的分割逻辑中增加判断：若剩余部分大小小于阈值，则不分割，直接分配整个块。避免无用碎片污染 `free_list`。
 
 
 ### 扩展练习Challenge：buddy system（伙伴系统）分配算法

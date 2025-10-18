@@ -533,3 +533,8 @@ static void buddy_free_pages(struct Page *base, size_t n) {
 
 #### 测试与验证
 我们编写了函数进行测试，测试结果如下
+<div align="center">
+  <img src="../assests/SLUB.png" alt="slub算法测试">
+</div>
+
+<center> slub算法测试 </center>

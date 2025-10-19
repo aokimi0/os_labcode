@@ -11,6 +11,35 @@
  * - 当对象数为0时释放该页。
  */
 
+/*
+ * 模块概述
+ *
+ * 简介:
+ *   该文件实现了一个教学用途的精简 SLUB 分配器，面向小对象分配，
+ *   以页为单位获取底层物理页，页内以位图管理等大对象槽位。
+ *
+ * 设计要点:
+ *   - 固定 size-class 桶；按 class 维护 empty/partial/full 三类链表。
+ *   - 页首承载 `slab_header_t` 与位图，位图后紧邻对象区域，按位查找空闲。
+ *   - 小对象(≤PGSIZE)走 SLUB；大对象(>PGSIZE)直接整页分配并返回内核虚拟地址。
+ *
+ * 并发/中断:
+ *   本实现未加入锁与中断保护，默认在单核或上层已序列化的上下文调用。
+ *
+ * 复杂度:
+ *   - 分配: 在对应 slab 的位图上寻找首个 0 位，最坏 O(words)。
+ *   - 释放: O(1)。
+ *
+ * 局限:
+ *   - 未实现对象对齐/构造/析构回调；未做 NUMA、本地 CPU 迁移优化。
+ */
+
+/*
+ * slab_header_t
+ *
+ * 简介:
+ *   位于每个 slab 页首的元数据，维护该页内对象配额与位图。
+ */
 typedef struct slab_header {
     list_entry_t link;      // 链入 kmem_cache 的 partial/empty 列表
     uint16_t obj_size;      // 对象大小
@@ -20,6 +49,15 @@ typedef struct slab_header {
     uint32_t bitmap[];      // 变长位图
 } slab_header_t;
 
+/*
+ * kmem_cache_t
+ *
+ * 简介:
+ *   对应一个 size-class 的对象缓存，维护三种 slab 链表：
+ *   - empty: 尚未分配对象的 slab；
+ *   - partial: 部分占用；
+ *   - full: 已满。
+ */
 typedef struct kmem_cache {
     uint16_t obj_size;
     list_entry_t partial;
@@ -27,9 +65,22 @@ typedef struct kmem_cache {
     list_entry_t empty;
 } kmem_cache_t;
 
+/* 固定的 size-class 列表，按升序排列。 */
 static const size_t k_size_classes[] = {16,32,64,128,256,512,1024,2048,4096};
 static kmem_cache_t caches[sizeof(k_size_classes)/sizeof(k_size_classes[0])];
 
+/*
+ * size_to_index
+ *
+ * 简介:
+ *   将请求大小映射到不小于它的 size-class 索引。
+ *
+ * 参数:
+ *   sz: 请求的字节数。
+ *
+ * 返回值:
+ *   成功返回对应索引，失败返回 -1（超出最大 class）。
+ */
 static int size_to_index(size_t sz) {
     for (size_t i = 0; i < sizeof(k_size_classes)/sizeof(k_size_classes[0]); i++) {
         if (sz <= k_size_classes[i]) return (int)i;
@@ -37,10 +88,38 @@ static int size_to_index(size_t sz) {
     return -1;
 }
 
+/*
+ * page_to_va
+ *
+ * 简介:
+ *   将页结构转换为其内核虚拟地址。
+ *
+ * 参数:
+ *   p: 物理页描述符。
+ *
+ * 返回值:
+ *   该页在内核地址空间中的虚拟地址。
+ */
 static inline void *page_to_va(struct Page *p) {
     return (void *)(page2pa(p) + va_pa_offset);
 }
 
+/*
+ * new_slab
+ *
+ * 简介:
+ *   为给定 `kmem_cache` 分配一个新页作为 slab，初始化头与位图，
+ *   将其挂入 empty 链表。
+ *
+ * 参数:
+ *   cache: 目标 size-class 缓存。
+ *
+ * 返回值:
+ *   成功返回 slab 头指针，失败返回 NULL。
+ *
+ * 复杂度:
+ *   O(1)。
+ */
 static slab_header_t *new_slab(kmem_cache_t *cache) {
     struct Page *pg = alloc_pages(1);
     if (!pg) return NULL;
@@ -68,6 +147,18 @@ static slab_header_t *new_slab(kmem_cache_t *cache) {
 }
 
 // 手动实现 count trailing zeros，避免链接 libgcc
+/*
+ * ctz32
+ *
+ * 简介:
+ *   计算 32 位无符号整数末尾连续 0 的个数。
+ *
+ * 参数:
+ *   x: 输入值。
+ *
+ * 返回值:
+ *   若 x==0 返回 32；否则返回末尾 0 的数量。
+ */
 static inline int ctz32(uint32_t x) {
     if (x == 0) return 32;
     int n = 0;
@@ -78,6 +169,21 @@ static inline int ctz32(uint32_t x) {
     return n;
 }
 
+/*
+ * alloc_from_slab
+ *
+ * 简介:
+ *   在给定 slab 的位图中查找首个空闲对象槽位并标记占用。
+ *
+ * 参数:
+ *   hdr: slab 头。
+ *
+ * 返回值:
+ *   成功返回对象指针；若无空闲返回 NULL。
+ *
+ * 复杂度:
+ *   O(bitmap_words)。
+ */
 static void *alloc_from_slab(slab_header_t *hdr) {
     // 在位图中找第一个0位
     for (uint16_t w = 0; w < hdr->bitmap_words; w++) {
@@ -99,6 +205,16 @@ static void *alloc_from_slab(slab_header_t *hdr) {
     return NULL;
 }
 
+/*
+ * free_to_slab
+ *
+ * 简介:
+ *   释放给定对象到其所在 slab：按偏移定位索引，并清除位图对应位。
+ *
+ * 参数:
+ *   hdr: slab 头。
+ *   ptr: 由该 slab 提供的对象指针。
+ */
 static void free_to_slab(slab_header_t *hdr, void *ptr) {
     uint8_t *base = (uint8_t *)hdr;
     uint8_t *obj_base = base + sizeof(slab_header_t) + hdr->bitmap_words * sizeof(uint32_t);
@@ -109,6 +225,15 @@ static void free_to_slab(slab_header_t *hdr, void *ptr) {
     hdr->used--;
 }
 
+/*
+ * slub_init
+ *
+ * 简介:
+ *   初始化所有 size-class 的 `kmem_cache` 链表头与对象大小。
+ *
+ * 前置条件:
+ *   仅在系统启动阶段调用一次。
+ */
 void slub_init(void) {
     for (size_t i = 0; i < sizeof(k_size_classes)/sizeof(k_size_classes[0]); i++) {
         caches[i].obj_size = (uint16_t)k_size_classes[i];
@@ -118,6 +243,21 @@ void slub_init(void) {
     }
 }
 
+/*
+ * kmalloc
+ *
+ * 简介:
+ *   分配指定字节数的内存。小对象走 SLUB；大于一页的请求直接分配整页。
+ *
+ * 参数:
+ *   size: 请求的字节数。
+ *
+ * 返回值:
+ *   成功返回可用指针；失败返回 NULL。
+ *
+ * 注意:
+ *   未提供对象构造/对齐保证，仅保证满足 size-class 的自然对齐。
+ */
 void *kmalloc(size_t size) {
     if (size == 0) return NULL;
     if (size > PGSIZE) {
@@ -173,6 +313,19 @@ void *kmalloc(size_t size) {
     return p;
 }
 
+/*
+ * kfree
+ *
+ * 简介:
+ *   释放由 `kmalloc` 获取的对象或页块。
+ *
+ * 参数:
+ *   ptr: 先前分配得到的指针；允许为 NULL。
+ *
+ * 说明:
+ *   通过指针对齐回退至页首，获得 `slab_header_t`，在位图中清位；
+ *   若 slab 归还后变空，则释放整页；若由 full 变为可用，则移入 partial。
+ */
 void kfree(void *ptr) {
     if (!ptr) return;
     // 通过页头推导 slab_header：页首即 header
@@ -203,6 +356,12 @@ void kfree(void *ptr) {
     }
 }
 
+/*
+ * slub_check
+ *
+ * 简介:
+ *   自检：对若干 small/near-page 大小对象执行分配/释放，断言正确性。
+ */
 void slub_check(void) {
     slub_init();
     void *a = kmalloc(24);

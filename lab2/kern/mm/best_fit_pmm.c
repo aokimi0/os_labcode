@@ -72,7 +72,7 @@ best_fit_init_memmap(struct Page *base, size_t n) {
     struct Page *p = base;
     for (; p != base + n; p ++) {
         assert(PageReserved(p));
-        // 清空当前页框的标志和属性信息，并将页框的引用计数设置为0
+        // 转为可分配状态：清保留位/属性位，ref=0
         p->flags = 0;
         set_page_ref(p, 0);
         ClearPageProperty(p);
@@ -91,6 +91,7 @@ best_fit_init_memmap(struct Page *base, size_t n) {
                 list_add_before(le, &(base->page_link));
                 break;
             } else if (list_next(le) == &free_list) {
+                // 插到表尾（le 之后）
                 list_add(le, &(base->page_link));
             }
         }
@@ -122,6 +123,7 @@ best_fit_alloc_pages(size_t n) {
             struct Page *p = page + n;
             p->property = page->property - n;
             SetPageProperty(p);
+            // 余块与原块同地址序，插到 prev 之后
             list_add(prev, &(p->page_link));
         }
         nr_free -= n;

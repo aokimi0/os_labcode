@@ -67,13 +67,24 @@ static slab_header_t *new_slab(kmem_cache_t *cache) {
     return hdr;
 }
 
+// 手动实现 count trailing zeros，避免链接 libgcc
+static inline int ctz32(uint32_t x) {
+    if (x == 0) return 32;
+    int n = 0;
+    while ((x & 1) == 0) {
+        x >>= 1;
+        n++;
+    }
+    return n;
+}
+
 static void *alloc_from_slab(slab_header_t *hdr) {
     // 在位图中找第一个0位
     for (uint16_t w = 0; w < hdr->bitmap_words; w++) {
         uint32_t mask = hdr->bitmap[w];
         if (mask != 0xFFFFFFFFu) {
             uint32_t inv = ~mask;
-            int bit = __builtin_ctz(inv);
+            int bit = ctz32(inv);
             uint32_t setmask = 1u << bit;
             hdr->bitmap[w] |= setmask;
             hdr->used++;

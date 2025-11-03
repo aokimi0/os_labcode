@@ -28,8 +28,8 @@ void print_kerninfo(void) {
 int kern_init(void) {
     extern char edata[], end[];
     memset(edata, 0, end - edata);
+    cons_init();  // init the console first to ensure UART is ready
     dtb_init();
-    cons_init();  // init the console
     const char *message = "(THU.CST) os is loading ...\0";
     //cprintf("%s\n\n", message);
     cputs(message);

@@ -48,7 +48,17 @@ build_run(){
     run_qemu
 }
 
-check_result(){ show_check_tag "$1"; shift; if [ ! -s $qemu_out ]; then fail > /dev/null; else $1 "$@"; fi }
+check_result(){ 
+    show_check_tag "$1"
+    shift
+    local check_func="$1"
+    shift
+    if [ ! -s $qemu_out ]; then 
+        fail > /dev/null
+    else 
+        $check_func "$@"
+    fi
+}
 
 check_regexps(){
     okay=yes; not=0; reg=0; error=
@@ -70,14 +80,14 @@ check_regexps(){
 
 run_test(){ tag=; check=check_regexps; while true; do select=; case $1 in -tag) select=`expr substr $1 2 ${#1}`; eval $select='$2';; esac; if [ -z "$select" ]; then break; fi; shift; shift; done; defs=; while expr "x$1" : "x-D.*" > /dev/null; do defs="DEFS+='$1' $defs"; shift; done; if [ "x$1" = "x-check" ]; then check=$2; shift; shift; fi; $make $makeopts touch > /dev/null 2>&1; build_run "$tag" "$defs"; check_result 'check result' "$check" "$@"; }
 
-osimg=$(make_print ucoreimg)
 qemuopts="-machine virt -nographic -bios default -device loader,file=bin/ucore.img,addr=0x80200000"
 brkfun=
 
 $make $makeopts clean > /dev/null 2>&1
 
 pts=10
-run_test -tag 'slub selftest' -DSLUB_SELF_TEST -check check_regexps \
+build_run 'slub selftest' 'DEFS+=-DSLUB_SELF_TEST'
+check_result 'slub selftest' check_regexps \
     'slub_check() succeeded!'
 
 update_score

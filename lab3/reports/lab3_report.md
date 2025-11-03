@@ -38,6 +38,47 @@
 
 ### 练习 1：完善中断处理 
 
+
+- 在 `kern/trap/trap.c` 的 `interrupt_handler` 中完成 LAB3 EXERCISE1 处的实现，具体为：
+  - 调用 `clock_set_next_event()` 安排下一次时钟中断；
+  - `ticks++` 计数，每累积 100 次触发 `print_ticks()` 输出 `100 ticks`；
+  - `print_ticks()` 在 `DEBUG_GRADE` 宏下追加输出 `End of Test.` 并触发 panic，便于脚本截断；
+  - 计数到 10 次后调用 `sbi_shutdown()` 关机（关闭 `DEBUG_GRADE` 时有效）。
+
+#### 验证与评分
+
+已重写 `tools/grade.sh`，验证项如下：
+
+- 物理内存信息与管理器：
+  - 匹配 `memory management: default_pmm_manager`
+  - 匹配 `  memory: 0x0000000008000000, [0x0000000080000000, 0x0000000087ffffff].`
+
+- 分配正确性（默认管理器）：
+  - 匹配 `check_alloc_page() succeeded!`
+  - 匹配 `satp virtual address: 0xffffffffc0205000`
+  - 匹配 `satp physical address: 0x0000000080205000`
+
+- 时钟中断与 100 次打印：
+  - 匹配 `++ setup timer interrupts`
+  - 匹配 `100 ticks`
+  - 匹配 `End of Test.`（由 `DEBUG_GRADE` 触发，快速结束）
+
+评分脚本要点：
+
+- 通过 `make print-*` 获取 `QEMU/GDB/GRADE_QEMU_OUT` 等变量；
+- `-serial file:$qemu_out` 捕获串口输出；
+- 每个 case 单独构建、运行、校验，累积分数；
+- `-DDEBUG_GRADE` 使内核在首个 `100 ticks` 后快速结束，避免等待 10 次关机；
+
+测试结果如下：
+
+<div align="center">
+  <img src="../assests/tic.png" alt="中断测试">
+</div>
+
+<center> 中断测试 </center>
+
+
 ### Challenge1：描述与理解中断流程
 
 #### 1\. 描述 ucore 中处理中断异常的流程
@@ -147,6 +188,19 @@ struct trapframe {
 
 ### 扩展练习 Challenge2：理解上下文切换机制
 
-回答：在trapentry.S中汇编代码 csrw sscratch, sp；csrrw s0, sscratch, x0实现了什么操作，目的是什么？save all里面保存了stval scause这些csr，而在restore all里面却不还原它们？那这样store的意义何在呢？
+回答：在trapentry.S中汇编代码 `csrw sscratch, sp；csrrw s0, sscratch, x0`实现了什么操作，目的是什么？`save all`里面保存了`stval scause`这些csr，而在`restore all`里面却不还原它们？那这样store的意义何在呢？
 
 答：sscratch是一个临时寄存器，这两条汇编指令首先将栈顶指针保存到了sscratch中，在STORE结束后又把栈顶指针取出来，将sscratch赋值为0。stval scause都是临时的寄存器，存储但是不还原。stval存储了这次异常相关的那个值，scause存储了导致异常的原因，这些值都是用来调试和快速定位的，下次来下一个异常覆盖成新的值了，与当前程序的状态也无关，所以无需还原。
+
+
+### 扩展练习 Challenge3：异常打印验证（断点与非法指令）
+
+- 已在 `kern/mm/pmm.c` 的 `pmm_init()` 尾部添加可选测试hook：当定义 `CH3_TEST` 时会主动触发一次 ebreak 和一次非法指令，便于验证 `trap.c` 中 Challenge3 的处理逻辑。
+
+- 编译与运行：
+
+```bash
+make -C lab3 clean
+make -C lab3 -j DEFS+='-DCH3_TEST'
+make -C lab3 qemu
+```

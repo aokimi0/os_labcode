@@ -35,6 +35,7 @@ static void check_alloc_page(void);
 
 // init_pmm_manager - initialize a pmm_manager instance
 static void init_pmm_manager(void) {
+    // 使用默认物理内存管理器
     pmm_manager = &default_pmm_manager;
     cprintf("memory management: %s\n", pmm_manager->name);
     pmm_manager->init();
@@ -139,6 +140,19 @@ void pmm_init(void) {
     satp_virtual = (pte_t*)boot_page_table_sv39;
     satp_physical = PADDR(satp_virtual);
     cprintf("satp virtual address: 0x%016lx\nsatp physical address: 0x%016lx\n", satp_virtual, satp_physical);
+
+    /*
+     * @brief Challenge3 验证触发点（仅测试用）
+     *
+     * 在定义 CH3_TEST 时，内核完成内存管理初始化与 satp 打印后，
+     * 主动触发一次断点异常与一次非法指令异常，用于验证 trap.c 中
+     * 的 Challenge3 实现（打印异常类型与地址，并跳过故障指令）。
+     */
+    #ifdef CH3_TEST
+    asm volatile("ebreak");                 // 触发断点异常
+    asm volatile(".word 0x00000000");       // 构造非法指令
+    sbi_shutdown();                          // 验证完成后自动关机
+    #endif
 }
 
 static void check_alloc_page(void) {

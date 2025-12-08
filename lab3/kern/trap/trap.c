@@ -9,6 +9,7 @@
 #include <clock.h>
 #include <console.h>
 #include <defs.h>
+#include <assert.h>
 #include <kdebug.h>
 #include <memlayout.h>
 #include <mmu.h>
@@ -27,8 +28,8 @@
  */
 static void print_ticks() {
     cprintf("%d ticks\n", TICK_NUM);
-#ifdef DEBUG_GRADE
     cprintf("End of Test.\n");
+#ifdef DEBUG_GRADE
     panic("EOT: kernel seems ok.");
 #endif
 }
@@ -60,7 +61,6 @@ void idt_init(void) {
      * check the libs/x86.h to know more.
      *     Notice: the argument of lidt is idt_pd. try to find it!
      */
-
     extern void __alltraps(void);
     /* Set sup0 scratch register to 0, indicating to exception vector
        that we are presently executing in the kernel */
@@ -223,7 +223,7 @@ void exception_handler(struct trapframe *tf) {
         case CAUSE_FAULT_FETCH:
             break;
         case CAUSE_ILLEGAL_INSTRUCTION:
-             // 非法指令异常处理
+            // 非法指令异常处理
             /* LAB3 CHALLENGE3   YOUR CODE :  */
             /*(1)输出指令异常类型（ Illegal instruction）
              *(2)输出异常指令地址
@@ -234,7 +234,7 @@ void exception_handler(struct trapframe *tf) {
             tf->epc += 4;
             break;
         case CAUSE_BREAKPOINT:
-            //断点异常处理
+            // 断点异常处理
             /* LAB3 CHALLLENGE3   YOUR CODE :  */
             /*(1)输出指令异常类型（ breakpoint）
              *(2)输出异常指令地址

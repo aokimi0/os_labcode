@@ -34,11 +34,61 @@
 ### 扩展练习Challenge3：完善异常中断
 编程完善在触发一条非法指令异常和断点异常，在 kern/trap/trap.c的异常处理函数中捕获，并对其进行处理，简单输出异常类型和异常指令触发地址，即“Illegal instruction caught at 0x(地址)”，“ebreak caught at 0x（地址）”与“Exception type:Illegal instruction"，“Exception type: breakpoint”。
 
-## 实验过程
+## 实验过程与验证
 
-### 练习 1：完善中断处理 
+### 练习 1：完善中断处理
 
-### Challenge1：描述与理解中断流程
+- 在 `kern/trap/trap.c` 的 `interrupt_handler` 中完成 LAB3 EXERCISE1 处的实现，具体为：
+  - 调用 `clock_set_next_event()` 安排下一次时钟中断；
+  - `ticks++` 计数，每累积 100 次触发 `print_ticks()` 输出 `100 ticks`；
+  - `print_ticks()` 在 `DEBUG_GRADE` 宏下追加输出 `End of Test.` 并触发 panic，便于脚本截断；
+  - 计数到 10 次后调用 `sbi_shutdown()` 关机（关闭 `DEBUG_GRADE` 时有效）。
+
+#### 验证与评分
+
+已重写 `tools/grade.sh`，验证项如下：
+
+- 物理内存信息与管理器：
+  - 匹配 `memory management: default_pmm_manager`
+  - 匹配 `  memory: 0x0000000008000000, [0x0000000080000000, 0x0000000087ffffff].`
+
+- 分配正确性（默认管理器）：
+  - 匹配 `check_alloc_page() succeeded!`
+  - 匹配 `satp virtual address: 0xffffffffc0205000`
+  - 匹配 `satp physical address: 0x0000000080205000`
+
+- 时钟中断与 100 次打印：
+  - 匹配 `++ setup timer interrupts`
+  - 匹配 `100 ticks`
+  - 匹配 `End of Test.`（由 `DEBUG_GRADE` 触发，快速结束）
+
+评分脚本要点：
+
+- 通过 `make print-*` 获取 `QEMU/GDB/GRADE_QEMU_OUT` 等变量；
+- `-serial file:$qemu_out` 捕获串口输出；
+- 每个 case 单独构建、运行、校验，累积分数；
+- `-DDEBUG_GRADE` 使内核在首个 `100 ticks` 后快速结束，避免等待 10 次关机；
+- 日志保存为以 tag 命名的 `.log` 文件。
+
+#### 运行方法
+
+
+```bash
+make -C lab3 grade
+# 或手动执行：
+sh lab3/tools/grade.sh -v
+```
+
+在 WSL + QEMU 4.1.1 环境下，脚本使用 `-machine virt -bios default` 与 loader 直接加载 `bin/ucore.img`，与 Makefile 保持一致。
+
+也可使用qemu验证
+```bash
+make -C lab3 clean
+make -C lab3
+make -C lab3 qemu
+```
+
+### 扩展练习 Challenge1：描述与理解中断流程
 
 #### 1\. 描述 ucore 中处理中断异常的流程
 
@@ -150,3 +200,26 @@ struct trapframe {
 回答：在trapentry.S中汇编代码 csrw sscratch, sp；csrrw s0, sscratch, x0实现了什么操作，目的是什么？save all里面保存了stval scause这些csr，而在restore all里面却不还原它们？那这样store的意义何在呢？
 
 答：sscratch是一个临时寄存器，这两条汇编指令首先将栈顶指针保存到了sscratch中，在STORE结束后又把栈顶指针取出来，将sscratch赋值为0。stval scause都是临时的寄存器，存储但是不还原。stval存储了这次异常相关的那个值，scause存储了导致异常的原因，这些值都是用来调试和快速定位的，下次来下一个异常覆盖成新的值了，与当前程序的状态也无关，所以无需还原。
+
+### 扩展练习 Challenge3：异常打印验证（断点与非法指令）
+
+- 已在 `kern/mm/pmm.c` 的 `pmm_init()` 尾部添加可选测试钩子：当定义 `CH3_TEST` 时会主动触发一次 ebreak 和一次非法指令，便于验证 `trap.c` 中 Challenge3 的处理逻辑。
+
+- 编译与运行（建议在 DEBUG_GRADE 下快速收敛日志）：
+
+```bash
+make -C lab3 clean
+make -C lab3 -j DEFS+='-DCH3_TEST'
+make -C lab3 qemu
+```
+
+- 期望在串口输出 `lab3/.qemu.out` 中出现如下行（地址以实际为准）：
+
+```bash
+grep -E 'ebreak caught|Exception type: breakpoint|Illegal instruction caught|Exception type:Illegal instruction' lab3/.qemu.out
+# 期望匹配：
+# ebreak caught at 0xXXXXXXXX
+# Exception type: breakpoint
+# Illegal instruction caught at 0xXXXXXXXX
+# Exception type:Illegal instruction
+```

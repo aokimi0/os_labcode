@@ -10,6 +10,7 @@ lab*/bin/
 lab*/obj/
 lab*/out/
 lab*/build/
+qemu-4.1.1/
 
 # 编译产物与依赖文件
 *.o
@@ -20,6 +21,7 @@ lab*/build/
 *.la
 *.lo
 *.lai
+*.zip
 
 # 可执行/镜像/映射等常见目标
 *.elf

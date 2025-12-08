@@ -56,6 +56,7 @@ coverage/
 # 编辑器/IDE
 .vscode/
 .idea/
+.cursor/
 .cursorrules
 *.code-workspace
 .ccls-cache/

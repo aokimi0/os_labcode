@@ -28,22 +28,6 @@
   - 使用全局 `ticks` 计数，每当 `ticks % 100 == 0` 时调用 `print_ticks()` 输出一行 `100 ticks`；
   - 使用静态局部变量 `printed_times` 统计打印次数，当达到 10 次后调用 `sbi_shutdown()` 关机（在未定义 `DEBUG_GRADE` 时有效）。
 
-#### 验证方法
-
-- 执行：
-
-```bash
-make -C lab4 clean
-make -C lab4
-make -C lab4 qemu
-```
-
-- 在串口输出中可观察到：
-  - 物理内存信息与默认管理器名称输出；
-  - `check_alloc_page() succeeded!` 等物理内存自检信息；
-  - 每约 1 秒一次的 `100 ticks` 打印，以及在非 `DEBUG_GRADE` 模式下累计 10 次后自动关机。
-
----
 
 ### 练习1：分配并初始化一个进程控制块（需要编码）
 

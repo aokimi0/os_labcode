@@ -53,7 +53,8 @@ else
 fi
 
 ## default variables
-default_timeout=10
+## 增加超时时间：RISC-V QEMU 启动较慢，10秒可能不够
+default_timeout=15
 default_pts=5
 
 pts=5
@@ -123,8 +124,9 @@ fail() {
 }
 
 run_qemu() {
-    # Run qemu with serial output redirected to $qemu_out. If $brkfun is non-empty,
-    # wait until $brkfun is reached or $timeout expires, then kill QEMU
+    # Run qemu with serial output redirected to $qemu_out.
+    # 使用 timeout 命令限制实际运行时间（而非 ulimit -t 的 CPU 时间）
+    # 原因：spin 等测试中子进程死循环会快速消耗 CPU 时间导致误杀
     qemuextra=
     if [ "$brkfun" ]; then
         qemuextra="-S $qemugdb"
@@ -135,14 +137,14 @@ run_qemu() {
     fi
 
     t0=$(get_time)
-    (
-        ulimit -t $timeout
-        exec $qemu -nographic $qemuopts -serial file:$qemu_out -monitor null -no-reboot $qemuextra
-    ) > $out 2> $err &
+    
+    # 使用 timeout 命令限制实际运行时间，而非 ulimit -t（CPU 时间）
+    # 这样 spin 测试中的死循环子进程不会导致 QEMU 被过早终止
+    timeout $timeout $qemu -nographic $qemuopts -serial file:$qemu_out -monitor null -no-reboot $qemuextra > $out 2> $err &
     pid=$!
 
-    # wait for QEMU to start
-    sleep 1
+    # 等待 QEMU 完成或超时
+    wait $pid 2>/dev/null
 
     if [ -n "$brkfun" ]; then
         # find the address of the kernel $brkfun function
@@ -328,7 +330,9 @@ swapimg=$(make_print swapimg)
 qemuopts="-machine virt -nographic -bios default -device loader,file=bin/ucore.img,addr=0x80200000"
 
 ## set break-function, default is readline
-brkfun=readline
+## 注意：RISC-V 架构下 GDB 断点模式不兼容，禁用断点改用纯超时模式
+## 原因：x86 地址转换 sed "s/^c0/00/g" 对 RISC-V 地址格式 0xffffffffc020xxxx 无效
+brkfun=
 
 default_check() {
     pts=7

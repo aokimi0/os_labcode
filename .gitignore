@@ -12,6 +12,8 @@ lab*/out/
 lab*/build/
 qemu-4.1.1/
 
+*.tar.xz
+
 # 编译产物与依赖文件
 *.o
 *.d
@@ -35,6 +37,7 @@ qemu-4.1.1/
 *.list
 *.lst
 *.asm
+*.in
 
 # 覆盖率与报告
 *.gcno
